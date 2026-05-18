@@ -191,11 +191,17 @@
 
                                     <div class="dropdown-divider"></div>
 
-                                    <!-- item-->
-                                    <a href="auth-logout.html" class="dropdown-item notify-item">
-                                        <i class="mdi mdi-location-exit fs-16 align-middle"></i>
-                                        <span>Logout</span>
-                                    </a>
+                                    <form action="{{ route('logout') }}" method="POST" class="m-0 p-0">
+    @csrf
+
+    <button
+        type="submit"
+        class="dropdown-item notify-item border-0 bg-transparent w-100 text-start"
+    >
+        <i class="mdi mdi-location-exit fs-16 align-middle"></i>
+        <span>Logout</span>
+    </button>
+</form>
                                 </div>
                             </li>
                         </ul>
@@ -243,7 +249,7 @@
                                 <div class="collapse" id="sidebarDashboards">
                                     <ul class="nav-second-level">
                                         <li>
-                                            <a href="{{ url('/dashboard') }}" class="tp-link">Dashboard</a>
+                                            <a href="{{ url('/dashboard-frontdesk') }}" class="tp-link">Dashboard</a>
                                         </li>
                                         <li>
                                             <a href="index.html" class="tp-link">CRM</a>

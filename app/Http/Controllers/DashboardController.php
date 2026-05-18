@@ -66,7 +66,7 @@ class DashboardController extends Controller
     }
 
     // ── Dashboard ─────────────────────────────────────────────────────
-    public function index_dashboard()
+    public function index_dashboard_frontdesk()
     {
         $data['title'] = 'Dashboard Admin';
 
@@ -123,117 +123,11 @@ class DashboardController extends Controller
                                ->sortBy('SHADOW_POSITION')
                                ->values();
 
-        // ── Re-sort shadow queue dengan proteksi frozen/veteran ───────
-        //
-        // Pasien PROTECTED (ADJUSTED_STATUS >= 2 ATAU waiting >= 30 menit)
-        // dipin ke slot mereka — tidak bisa digeser ke mana pun.
-        // Pasien FREE diurutkan ulang by dynamic_score DESC di slot yang tersisa.
-        //
-
-        // Replace Start
-        $totalSlots   = $shadowOnly->count();
-$pinnedSlots  = [];
-$freePatients = [];
-
-foreach ($shadowOnly as $idx => $q) {
-    if ($q->ADJUSTED_STATUS >= 2 || $q->waiting_minutes >= 30) {
-        // Pasien protected: simpan dengan key = posisi asli mereka
-        // Key ini yang menjadi "kunci mati" slot — tidak bisa diambil siapapun
-        $pinnedSlots[$idx] = $q;
-    } else {
-        // FIX #1 & #2: simpan posisi asal ($idx) bersama pasien
-        // Tanpa ini, kita tidak bisa tahu nanti "seberapa jauh boleh naik"
-        // dan tidak bisa tahu apakah ada pinned di atas mereka
-        $freePatients[] = ['patient' => $q, 'original_idx' => $idx];
-    }
-}
-
-// Sort free patients by score DESC — ini tetap sama
-// Tapi sekarang tiap item masih membawa original_idx-nya
-usort($freePatients, fn($a, $b) => $b['patient']->dynamic_score <=> $a['patient']->dynamic_score);
-
-// Kumpulkan slot-slot yang BUKAN milik pinned → slot yang bisa diperebutkan free patients
-$freeSlots = [];
-for ($pos = 0; $pos < $totalSlots; $pos++) {
-    if (!isset($pinnedSlots[$pos])) {
-        $freeSlots[] = $pos; // slot kosong, tersedia untuk free patients
-    }
-}
-
-// Isi pinned slots dulu ke hasil akhir
-$shadowSortedArr = [];
-foreach ($pinnedSlots as $pos => $q) {
-    $shadowSortedArr[$pos] = $q;
-}
-
-// FIX #1: Assign tiap free patient ke free slot yang valid
-// Valid = slot tersebut >= (original_idx - 2)
-// Artinya pasien hanya boleh naik MAKSIMAL 2 posisi dari posisi asalnya
-//
-// FIX #2: Karena $freeSlots hanya berisi slot yang bukan milik pinned,
-// free patient tidak akan pernah bisa "menempati" slot pinned
-// → ADJUSTED_STATUS >= 2 benar-benar memblokir slot tersebut
-//
-// Contoh: pinned di slot 3, free slots = [0,1,2,4,5]
-// Pasien A (original_idx=5) → minAllowed=3 → hanya boleh ambil slot 3,4,5
-//   tapi slot 3 bukan free slot (milik pinned) → hanya bisa ambil 4 atau 5
-// Pasien B (original_idx=1) → minAllowed=-1 → boleh ambil slot manapun yang tersisa
-
-$usedFreeSlots = []; // tracking slot mana yang sudah dipakai
-
-foreach ($freePatients as $item) {
-    $patient     = $item['patient'];
-    $originalIdx = $item['original_idx'];
-    $minAllowed  = $originalIdx - 2; // tidak boleh naik lebih dari 2 posisi
-
-    // Cari slot terkecil (paling atas/prioritas) yang masih tersedia
-    // dan tidak melanggar batas naik 2 posisi
-    $chosenSlot = null;
-    foreach ($freeSlots as $slotKey => $slotPos) {
-        if (isset($usedFreeSlots[$slotKey])) continue; // slot sudah dipakai
-        if ($slotPos >= $minAllowed) {
-            // Slot ini valid: tidak melampaui batas naik
-            // Karena $freeSlots sudah urut ASC, yang pertama valid = yang paling atas
-            $chosenSlot    = $slotPos;
-            $usedFreeSlots[$slotKey] = true;
-            break;
-        }
-    }
-
-    if ($chosenSlot !== null) {
-        $shadowSortedArr[$chosenSlot] = $patient;
-    }
-}
-
-// Edge case: ada free patient yang tidak dapat slot (semua slot valid sudah penuh)
-// Masukkan ke slot sisa yang belum terisi, urut dari bawah
-$remainingSlotsForOverflow = [];
-foreach ($freeSlots as $slotKey => $slotPos) {
-    if (!isset($usedFreeSlots[$slotKey])) {
-        $remainingSlotsForOverflow[] = $slotPos;
-    }
-}
-
-$overflowIndex = 0;
-foreach ($freePatients as $item) {
-    $patient = $item['patient'];
-    // Cek apakah sudah masuk ke $shadowSortedArr
-    $alreadyPlaced = false;
-    foreach ($shadowSortedArr as $placed) {
-        if ($placed->QUEUE_ID === $patient->QUEUE_ID) {
-            $alreadyPlaced = true;
-            break;
-        }
-    }
-    if (!$alreadyPlaced && isset($remainingSlotsForOverflow[$overflowIndex])) {
-        $shadowSortedArr[$remainingSlotsForOverflow[$overflowIndex]] = $patient;
-        $overflowIndex++;
-    }
-}
-
-ksort($shadowSortedArr); // pastikan urut by key/posisi ASC
-$shadowSorted = collect(array_values($shadowSortedArr));
-        // Replace End
+        // ── Re-sort shadow queue dinonaktifkan ────────────────────────
+        // Agar rule maksimal bypass 2 posisi (yang sudah diatur saat pasien baru
+        // masuk di fungsi bubbleUpNewPatient) tidak rusak / berulang kali bypass
+        // setiap kali halaman dashboard di-refresh.
+        $shadowSorted = $shadowOnly->values();
 
         // ── Detect bypasses dan update ADJUSTED_STATUS ────────────────
         foreach ($shadowSorted as $newPos => $q) {
@@ -540,8 +434,30 @@ $shadowSorted = collect(array_values($shadowSortedArr));
             ->update(['SHADOW_POSITION' => $currentPosition]);
     }
 
-    public function update_queue_status(Request $req)
+    public function queuePanggil(Request $request)
     {
-        
+        DB::table('tr_queue_polyclinic')
+            ->where('QUEUE_ID', $request->queue_id)
+            ->update(['QUEUE_STATUS' => 'Dilayani']);
+            
+        return response()->json(['success' => true]);
+    }
+
+    public function queueMissed(Request $request)
+    {
+        DB::table('tr_queue_polyclinic')
+            ->where('QUEUE_ID', $request->queue_id)
+            ->update(['QUEUE_STATUS' => 'Missed']);
+            
+        return response()->json(['success' => true]);
+    }
+
+    public function queueSelesai(Request $request)
+    {
+        DB::table('tr_queue_polyclinic')
+            ->where('QUEUE_ID', $request->queue_id)
+            ->update(['QUEUE_STATUS' => 'Selesai']);
+            
+        return response()->json(['success' => true]);
     }
 }

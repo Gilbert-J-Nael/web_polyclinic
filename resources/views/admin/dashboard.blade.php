@@ -28,6 +28,24 @@
     </div>
 </div>
 
+{{-- ✅ Confirm Modal (Panggil & Selesai) --}}
+        <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow rounded-4">
+                    <div class="modal-header border-bottom px-4 py-3">
+                        <h6 class="fw-semibold mb-0" id="confirmModalTitle"></h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <p class="mb-0" id="confirmModalText"></p>
+                    </div>
+                    <div class="modal-footer px-4 py-3">
+                        {{-- Buttons injected dynamically by JS --}}
+                    </div>
+                </div>
+            </div>
+        </div>
+
 {{-- Queue Tables --}}
 <div style="display:flex; width:100%; gap:1rem;">
 
@@ -97,22 +115,24 @@
                                     @endif
                                 </td>
                                 <td class="pe-3 text-center">
-                                    @if ($q->QUEUE_STATUS === 'Dilayani')
-                                        <button class="btn btn-sm btn-success rounded-pill px-3"
-                                            style="font-size:.72rem"
-                                            onclick="confirmSelesai({{ $q->QUEUE_ID }})">
-                                            <i class="bi bi-check-circle me-1"></i>Selesai
-                                        </button>
-                                    @elseif ($i === 0)
-                                        <button class="btn btn-sm btn-primary rounded-pill px-3"
-                                            style="font-size:.72rem"
-                                            onclick="confirmPanggil({{ $q->QUEUE_ID }})">
-                                            <i class="bi bi-megaphone me-1"></i>Panggil
-                                        </button>
-                                    @else
-                                        <span class="text-muted">—</span>
-                                    @endif
-                                </td>
+                                            @if ($q->QUEUE_STATUS === 'Dilayani')
+                                                {{-- ✅ Sudah dipanggil → tampilkan Selesai --}}
+                                                <button class="btn btn-sm btn-success rounded-pill px-3"
+                                                    style="font-size:.72rem"
+                                                    onclick="confirmSelesai({{ $q->QUEUE_ID }})">
+                                                    <i class="bi bi-check-circle me-1"></i>Selesai
+                                                </button>
+                                            @elseif ($i === 0)
+                                                {{-- ✅ Antrean pertama → tampilkan Panggil --}}
+                                                <button class="btn btn-sm btn-primary rounded-pill px-3"
+                                                    style="font-size:.72rem"
+                                                    onclick="confirmPanggil({{ $q->QUEUE_ID }})">
+                                                    <i class="bi bi-megaphone me-1"></i>Panggil
+                                                </button>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
                             </tr>
                             @empty
                             <tr>
