@@ -291,6 +291,9 @@
                                             <a href="{{ url('/master-jadwal-dokter') }}" class="tp-link">Jadwal Dokter</a>
                                         </li>
                                         <li>
+                                            <a href="{{ url('/riwayat-kunjungan') }}" class="tp-link">Riwayat Kunjungan</a>
+                                        </li>
+                                        <li>
                                             <a href="ecommerce.html" class="tp-link">eCommerce</a>
                                         </li>
                                         <li>

@@ -460,4 +460,67 @@ class DashboardController extends Controller
             
         return response()->json(['success' => true]);
     }
+
+    public function index_dashboard_pasien()
+{
+    $data['title'] = 'Antrean Pasien';
+ 
+    $days = [
+        0 => 'Minggu', 1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu',
+        4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu'
+    ];
+    $today = $days[now()->dayOfWeek];
+ 
+    // ── Fetch semua antrean aktif hari ini ────────────────────────────
+    $queues = DB::table('tr_queue_polyclinic as tq')
+        ->leftJoin('md_patient as mp',          'tq.PATIENT_ID',  '=', 'mp.PATIENT_ID')
+        ->leftJoin('md_doctor_schedule as mds', 'tq.SCHEDULE_ID', '=', 'mds.SCHEDULE_ID')
+        ->leftJoin('md_doctor as md',           'mds.DOCTOR_ID',  '=', 'md.DOCTOR_ID')
+        ->leftJoin('md_poly as mpoly',          'mds.POLY_ID',    '=', 'mpoly.POLY_ID')
+        ->leftJoin('md_poly_room as mpr',       'mpoly.ROOM_ID',  '=', 'mpr.ROOM_ID')
+        ->whereIn('tq.QUEUE_STATUS', ['Menunggu', 'Dilayani'])
+        ->where('tq.IS_ACTIVE', 1)
+        ->when($today, fn($q) => $q->where('mds.DAY', $today))
+        ->select(
+            'tq.QUEUE_ID', 'tq.QUEUE_NUMBER', 'tq.QUEUE_STATUS',
+            'tq.SYSTOLIC', 'tq.DIASTOLIC',
+            'tq.COMPLAINT_SCORE', 'tq.SPECIAL_CONDITION_SCORE',
+            'tq.FIXED_QUEUE_STATUS', 'tq.CREATED_AT',
+            'tq.REGISTRATION_DATE', 'tq.REGISTRATION_TIME',
+            'mp.PATIENT_NAME', 'mp.BIRTHDATE',
+            'md.DOCTOR_NAME', 'mpoly.POLY_NAME', 'mpr.ROOM_NAME'
+        )
+        ->get();
+ 
+    $serving = $queues->where('QUEUE_STATUS', 'Dilayani')->values();
+    $waiting = $queues->where('QUEUE_STATUS', 'Menunggu')->values();
+ 
+    // ── Hitung skor & waktu tunggu ────────────────────────────────────
+    $serving = $serving->map(function ($q) {
+        $q->waiting_minutes = $this->getWaitingMinutes($q);
+        return $q;
+    });
+ 
+    $waiting = $waiting->map(function ($q) {
+        $q->dynamic_score   = $this->calculateDynamicScore($q);
+        $q->waiting_minutes = $this->getWaitingMinutes($q);
+        return $q;
+    });
+ 
+    // ── Ambil hanya Fixed Queue (FIXED_QUEUE_STATUS = 1) ─────────────
+    // Urutan: yang sedang dilayani di atas, lalu waiting fixed queue
+    $fixedWaiting = $waiting->where('FIXED_QUEUE_STATUS', 1)
+                             ->sortBy('CREATED_AT')
+                             ->values();
+ 
+    // Gabungkan: sedang dilayani + fixed waiting
+    $data['fixed_queue']           = $serving->merge($fixedWaiting)->values();
+    $data['total_waiting']         = $waiting->count(); // total semua yang masih menunggu
+    $data['serving_queue']         = $serving->first();  // pasien yang sedang dilayani
+ 
+    return
+        view('patient.templates.header', $data).
+        view('patient.dashboard',        $data).
+        view('patient.templates.footer');
+}
 }

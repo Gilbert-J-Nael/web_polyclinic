@@ -45,6 +45,7 @@
 new DataTable('#patient');
 new DataTable('#doctor');
 new DataTable('#doctorschedule');
+new DataTable('#history');
 
 document.addEventListener('DOMContentLoaded', function () {
 

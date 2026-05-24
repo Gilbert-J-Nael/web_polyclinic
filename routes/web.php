@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthenticationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\HistoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,11 +18,7 @@ use App\Http\Controllers\MasterDataController;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
-
-Route::get('/login', [AuthenticationController::class, 'index_login']);
+Route::get('/', [AuthenticationController::class, 'index_login']);
 Route::post('/login/authentication', [AuthenticationController::class, 'login_function']);
 
 Route::get('/register', [AuthenticationController::class, 'index_register']);
@@ -41,9 +38,10 @@ Route::post('/queue/selesai', [DashboardController::class, 'queueSelesai']);
 Route::get('/master-pasien', [MasterDataController::class, 'index_pasien']);
 Route::get('/master-dokter', [MasterDataController::class, 'index_dokter']);
 Route::get('/master-jadwal-dokter', [MasterDataController::class, 'index_jadwal_dokter']);
+
+Route::get('/riwayat-kunjungan',        [HistoryController::class, 'index_riwayat_kunjungan'])->name('riwayat.index');
+Route::get('/riwayat-kunjungan/print',  [HistoryController::class, 'print_riwayat_kunjungan'])->name('riwayat.print');
 });
-
-
 
 Route::middleware(['usersession:PATIENT'])->group(function() {
     Route::get('/dashboard-pasien', [DashboardController::class, 'index_dashboard_pasien']);
