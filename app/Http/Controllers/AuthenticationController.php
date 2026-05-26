@@ -162,7 +162,7 @@ class AuthenticationController extends Controller
     public function logout()
     {
         Session::flush();
-        return redirect('login');
+        return redirect('/');
     }
 
     public function forgotPassword()

@@ -72,7 +72,7 @@
                 <div class="text-center">
                     <small class="text-muted">
                         Already have an account?
-                        <a href="{{ url('/login') }}" class="text-decoration-none">
+                        <a href="{{ url('/') }}" class="text-decoration-none">
                             Login
                         </a>
                     </small>

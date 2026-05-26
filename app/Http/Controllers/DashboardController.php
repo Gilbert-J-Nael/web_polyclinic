@@ -38,12 +38,12 @@ class DashboardController extends Controller
         $kondisi = $q->SPECIAL_CONDITION_SCORE ? 1 : 0;
 
         return round(
-            ($tensiAdjusted * 0.33) +
-            ($keluhanScore  * 0.32) +
-            ($waitingScore  * 0.25) +
-            ($kondisi       * 0.10),
-            4
-        );
+    ($tensiAdjusted * 0.40) +
+    ($keluhanScore  * 0.35) +
+    ($waitingScore  * 0.15) +
+    ($kondisi       * 0.10),
+    4
+);
     }
 
     // ── Tensi Score only (for display) ───────────────────────────────
@@ -225,23 +225,35 @@ class DashboardController extends Controller
 
     // ── Search Patients ───────────────────────────────────────────────
     public function searchPatients(Request $request)
-    {
-        $query = trim($request->get('q', ''));
-        if (strlen($query) < 1) return response()->json([]);
+{
+    $query = trim($request->get('q', ''));
+    if (strlen($query) < 1) return response()->json([]);
 
-        return response()->json(
-            DB::table('md_patient')
-                ->where('PATIENT_NAME', 'like', '%' . $query . '%')
-                ->orderBy('PATIENT_NAME')->limit(10)
-                ->select('PATIENT_ID', 'PATIENT_NAME', 'BIRTHDATE')
-                ->get()
-                ->map(fn($p) => [
-                    'PATIENT_ID'   => $p->PATIENT_ID,
-                    'PATIENT_NAME' => $p->PATIENT_NAME,
-                    'AGE'          => $p->BIRTHDATE ? \Carbon\Carbon::parse($p->BIRTHDATE)->age : null,
-                ])
-        );
-    }
+    // Ambil PATIENT_ID yang sudah terdaftar di antrean aktif hari ini
+    $alreadyQueued = DB::table('tr_queue_polyclinic')
+        ->whereIn('QUEUE_STATUS', ['Menunggu', 'Dilayani'])
+        ->where('IS_ACTIVE', 1)
+        ->where('REGISTRATION_DATE', now()->toDateString())
+        ->pluck('PATIENT_ID');
+
+    return response()->json(
+        DB::table('md_patient')
+            ->where('PATIENT_NAME', 'like', '%' . $query . '%')
+            ->where('IS_ACTIVE', 1)
+            ->whereNotIn('PATIENT_ID', $alreadyQueued)  // ← exclude yang sudah antri
+            ->orderBy('PATIENT_NAME')
+            ->limit(10)
+            ->select('PATIENT_ID', 'PATIENT_NAME', 'BIRTHDATE')
+            ->get()
+            ->map(fn($p) => [
+                'PATIENT_ID'   => $p->PATIENT_ID,
+                'PATIENT_NAME' => $p->PATIENT_NAME,
+                'AGE'          => $p->BIRTHDATE
+                                    ? \Carbon\Carbon::parse($p->BIRTHDATE)->age
+                                    : null,
+            ])
+    );
+}
 
     // ── Create Queue ──────────────────────────────────────────────────
     public function create_polyclinic_queue(Request $req)
@@ -522,5 +534,75 @@ class DashboardController extends Controller
         view('patient.templates.header', $data).
         view('patient.dashboard',        $data).
         view('patient.templates.footer');
+}
+
+// ── Store Patient ──────────────────────────────────────────────────────
+public function store_pasien(Request $req)
+{
+    $req->validate([
+        'PATIENT_NAME' => 'required|string|max:255',
+        'NIK'          => 'nullable|string|max:16',
+        'JK'           => 'required|in:Laki-laki,Perempuan',
+        'BIRTHDATE'    => 'required|date',
+        'PHONE'        => 'nullable|string|max:20',
+        'ADDRESS'      => 'nullable|string',
+    ]);
+
+    DB::table('md_patient')->insert([
+        'PATIENT_NAME' => $req->PATIENT_NAME,
+        'NIK'          => $req->NIK,
+        'JK'           => $req->JK,
+        'BIRTHDATE'    => $req->BIRTHDATE,
+        'PHONE'        => $req->PHONE,
+        'ADDRESS'      => $req->ADDRESS,
+        'IS_ACTIVE'    => 1,
+        'CREATED_AT'   => now(),
+        'UPDATED_AT'   => now(),
+    ]);
+
+    return back()->with('success', 'Pasien berhasil ditambahkan.');
+}
+
+// ── Update Patient ─────────────────────────────────────────────────────
+public function update_pasien(Request $req)
+{
+    $req->validate([
+        'PATIENT_ID'   => 'required|integer',
+        'PATIENT_NAME' => 'required|string|max:255',
+        'NIK'          => 'nullable|string|max:16',
+        'JK'           => 'required|in:Laki-laki,Perempuan',
+        'BIRTHDATE'    => 'required|date',
+        'PHONE'        => 'nullable|string|max:20',
+        'ADDRESS'      => 'nullable|string',
+    ]);
+
+    DB::table('md_patient')
+        ->where('PATIENT_ID', $req->PATIENT_ID)
+        ->update([
+            'PATIENT_NAME' => $req->PATIENT_NAME,
+            'NIK'          => $req->NIK,
+            'JK'           => $req->JK,
+            'BIRTHDATE'    => $req->BIRTHDATE,
+            'PHONE'        => $req->PHONE,
+            'ADDRESS'      => $req->ADDRESS,
+            'UPDATED_AT'   => now(),
+        ]);
+
+    return back()->with('success', 'Data pasien berhasil diperbarui.');
+}
+
+// ── Delete Patient (Soft Delete) ───────────────────────────────────────
+public function delete_pasien(Request $req)
+{
+    $req->validate(['PATIENT_ID' => 'required|integer']);
+
+    DB::table('md_patient')
+        ->where('PATIENT_ID', $req->PATIENT_ID)
+        ->update([
+            'IS_ACTIVE'  => 0,
+            'UPDATED_AT' => now(),
+        ]);
+
+    return back()->with('success', 'Pasien berhasil dinonaktifkan.');
 }
 }

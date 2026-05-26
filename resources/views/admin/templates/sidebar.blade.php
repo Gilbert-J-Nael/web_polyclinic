@@ -251,7 +251,7 @@
                                         <li>
                                             <a href="{{ url('/dashboard-frontdesk') }}" class="tp-link">Dashboard</a>
                                         </li>
-                                        <li>
+                                        <!-- <li>
                                             <a href="index.html" class="tp-link">CRM</a>
                                         </li>
                                         <li>
@@ -268,7 +268,7 @@
                                         </li>
                                         <li>
                                             <a href="jobs.html" class="tp-link">Jobs</a>
-                                        </li>
+                                        </li> -->
                                     </ul>
                                 </div>
                             </li>
@@ -309,9 +309,9 @@
                                 </div>
                             </li>
 
-                            <li class="menu-title">Pages</li>
+                            <!-- <li class="menu-title">Pages</li> -->
 
-                            <li>
+                            <!-- <li>
                                 <a href="#sidebarAuth" data-bs-toggle="collapse">
                                     <i data-feather="users"></i>
                                     <span> Authentication </span>
@@ -342,9 +342,9 @@
                                         </li>
                                     </ul>
                                 </div>
-                            </li>
+                            </li> -->
 
-                            <li>
+                            <!-- <li>
                                 <a href="#sidebarError" data-bs-toggle="collapse">
                                     <i data-feather="alert-octagon"></i>
                                     <span> Error Pages </span>
@@ -369,9 +369,9 @@
                                         </li>
                                     </ul>
                                 </div>
-                            </li>
+                            </li> -->
 
-                            <li>
+                            <!-- <li>
                                 <a href="#sidebarExpages" data-bs-toggle="collapse">
                                     <i data-feather="file-text"></i>
                                     <span> Utility </span>
@@ -408,9 +408,9 @@
                                         </li>
                                     </ul>
                                 </div>
-                            </li>
+                            </li> -->
 
-                            <li class="menu-title mt-2">Apps</li>
+                            <!-- <li class="menu-title mt-2">Apps</li>
                 
                             <li>
                                 <a href="apps-todolist.html" class="tp-link">
@@ -686,7 +686,7 @@
                                         </li>
                                     </ul>
                                 </div>
-                            </li>
+                            </li> -->
 
                         </ul>
             

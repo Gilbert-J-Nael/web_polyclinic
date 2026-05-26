@@ -22,6 +22,76 @@ class MasterDataController extends Controller
             view('admin.templates.footer');
     }
 
+    // ── Store Patient ──────────────────────────────────────────────────────
+public function store_pasien(Request $req)
+{
+    $req->validate([
+        'PATIENT_NAME' => 'required|string|max:255',
+        'NIK'          => 'nullable|string|max:16',
+        'GENDER'           => 'required|in:Male,Female',
+        'BIRTHDATE'    => 'required|date',
+        'PHONE'        => 'nullable|string|max:20',
+        'ADDRESS'      => 'nullable|string',
+    ]);
+
+    DB::table('md_patient')->insert([
+        'PATIENT_NAME' => $req->PATIENT_NAME,
+        'NIK'          => $req->NIK,
+        'GENDER'           => $req->GENDER,
+        'BIRTHDATE'    => $req->BIRTHDATE,
+        'PHONE'        => $req->PHONE,
+        'ADDRESS'      => $req->ADDRESS,
+        'IS_ACTIVE'    => 1,
+        'CREATED_AT'   => now(),
+        'UPDATED_AT'   => now(),
+    ]);
+
+    return back()->with('success', 'Pasien berhasil ditambahkan.');
+}
+
+// ── Update Patient ─────────────────────────────────────────────────────
+public function update_pasien(Request $req)
+{
+    $req->validate([
+        'PATIENT_ID'   => 'required|integer',
+        'PATIENT_NAME' => 'required|string|max:255',
+        'NIK'          => 'nullable|string|max:16',
+        'JK'           => 'required|in:Laki-laki,Perempuan',
+        'BIRTHDATE'    => 'required|date',
+        'PHONE'        => 'nullable|string|max:20',
+        'ADDRESS'      => 'nullable|string',
+    ]);
+
+    DB::table('md_patient')
+        ->where('PATIENT_ID', $req->PATIENT_ID)
+        ->update([
+            'PATIENT_NAME' => $req->PATIENT_NAME,
+            'NIK'          => $req->NIK,
+            'JK'           => $req->JK,
+            'BIRTHDATE'    => $req->BIRTHDATE,
+            'PHONE'        => $req->PHONE,
+            'ADDRESS'      => $req->ADDRESS,
+            'UPDATED_AT'   => now(),
+        ]);
+
+    return back()->with('success', 'Data pasien berhasil diperbarui.');
+}
+
+// ── Delete Patient (Soft Delete) ───────────────────────────────────────
+public function delete_pasien(Request $req)
+{
+    $req->validate(['PATIENT_ID' => 'required|integer']);
+
+    DB::table('md_patient')
+        ->where('PATIENT_ID', $req->PATIENT_ID)
+        ->update([
+            'IS_ACTIVE'  => 0,
+            'UPDATED_AT' => now(),
+        ]);
+
+    return back()->with('success', 'Pasien berhasil dinonaktifkan.');
+}
+
     public function index_dokter()
     {
         $data['title'] = 'Master Data Dokter';
@@ -82,10 +152,5 @@ class MasterDataController extends Controller
             view('admin.templates.sidebar') .
             view('admin.master_data.doctor_schedule', $data) .
             view('admin.templates.footer');
-    }
-
-    public function create_jadwal_dokter(Request $req)
-    {
-        $data
     }
 }

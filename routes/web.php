@@ -36,6 +36,10 @@ Route::post('/queue/missed', [DashboardController::class, 'queueMissed']);
 Route::post('/queue/selesai', [DashboardController::class, 'queueSelesai']);
 
 Route::get('/master-pasien', [MasterDataController::class, 'index_pasien']);
+Route::post('/master-pasien/store',  [MasterDataController::class, 'store_pasien']);
+Route::post('/master-pasien/update', [MasterDataController::class, 'update_pasien'])->name('pasien.update');
+Route::post('/master-pasien/delete', [MasterDataController::class, 'delete_pasien'])->name('pasien.delete');
+
 Route::get('/master-dokter', [MasterDataController::class, 'index_dokter']);
 Route::get('/master-jadwal-dokter', [MasterDataController::class, 'index_jadwal_dokter']);
 
