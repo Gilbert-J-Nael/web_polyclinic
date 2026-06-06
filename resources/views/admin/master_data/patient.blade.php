@@ -8,6 +8,20 @@
 </div>
 @endif -->
 
+@if (session('success'))
+<div class="alert alert-success alert-dismissible fade show mx-3 mt-2" role="alert">
+    <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
+@if (session('error'))
+<div class="alert alert-danger alert-dismissible fade show mx-3 mt-2" role="alert">
+    <i class="bi bi-x-circle me-2"></i>{{ session('error') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
 <div class="d-flex justify-content-end mb-3">
     <button class="btn btn-primary rounded-pill px-4"
             data-bs-toggle="modal" data-bs-target="#modalTambahPasien">
@@ -148,7 +162,7 @@
                 <h6 class="fw-semibold mb-0"><i class="bi bi-pencil-square me-2 text-warning"></i>Edit Data Pasien</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ route('pasien.update') }}" method="POST">
+            <form action="{{ url('/master-pasien/update') }}" method="POST">
                 @csrf
                 <input type="hidden" name="PATIENT_ID" id="edit_patient_id">
                 <div class="modal-body px-4 py-3">
@@ -200,7 +214,7 @@
                 <h6 class="fw-semibold mb-0 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Hapus Pasien</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ route('pasien.delete') }}" method="POST">
+            <form action="{{ url('/master-pasien/delete') }}" method="POST">
                 @csrf
                 <input type="hidden" name="PATIENT_ID" id="delete_patient_id">
                 <div class="modal-body px-4 py-3">
@@ -223,6 +237,16 @@
                 </div> <!-- content -->
 
 <script>
+    // Auto-dismiss alert setelah 4 detik
+document.addEventListener('DOMContentLoaded', function () {
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function (alert) {
+        setTimeout(function () {
+            const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+            bsAlert.close();
+        }, 4000);
+    });
+});
 // Buka modal Edit — isi field dari data JSON pasien
 function openviewModal(jsonStr) {
     const p = JSON.parse(jsonStr);

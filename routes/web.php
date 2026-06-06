@@ -37,11 +37,18 @@ Route::post('/queue/selesai', [DashboardController::class, 'queueSelesai']);
 
 Route::get('/master-pasien', [MasterDataController::class, 'index_pasien']);
 Route::post('/master-pasien/store',  [MasterDataController::class, 'store_pasien']);
-Route::post('/master-pasien/update', [MasterDataController::class, 'update_pasien'])->name('pasien.update');
-Route::post('/master-pasien/delete', [MasterDataController::class, 'delete_pasien'])->name('pasien.delete');
+Route::post('/master-pasien/update', [MasterDataController::class, 'update_pasien']);
+Route::post('/master-pasien/delete', [MasterDataController::class, 'delete_pasien']);
 
 Route::get('/master-dokter', [MasterDataController::class, 'index_dokter']);
+Route::post('/master-dokter/store',  [MasterDataController::class, 'store_dokter']);
+Route::post('/master-dokter/update', [MasterDataController::class, 'update_dokter']);
+Route::post('/master-dokter/delete', [MasterDataController::class, 'delete_dokter']);
+
 Route::get('/master-jadwal-dokter', [MasterDataController::class, 'index_jadwal_dokter']);
+Route::post('/master-jadwal-dokter/store', [MasterDataController::class, 'store_jadwal_dokter']);
+Route::post('/master-jadwal-dokter/update', [MasterDataController::class, 'update_jadwal_dokter']);
+Route::post('/master-jadwal-dokter/delete', [MasterDataController::class, 'delete_jadwal_dokter']);
 
 Route::get('/riwayat-kunjungan',        [HistoryController::class, 'index_riwayat_kunjungan'])->name('riwayat.index');
 Route::get('/riwayat-kunjungan/print',  [HistoryController::class, 'print_riwayat_kunjungan'])->name('riwayat.print');
