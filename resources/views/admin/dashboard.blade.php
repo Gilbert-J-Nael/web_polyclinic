@@ -311,8 +311,13 @@
                                         data-schedule-id="{{ $s->SCHEDULE_ID }}">
                                         <div class="d-flex align-items-start gap-2">
                                             <i class="bi bi-person-badge text-primary mt-1" style="font-size:1rem"></i>
-                                            <div>
-                                                <div class="fw-semibold" style="font-size:.82rem">{{ $s->DOCTOR_NAME ?? '-' }}</div>
+                                            <div class="w-100">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div class="fw-semibold" style="font-size:.82rem">{{ $s->DOCTOR_NAME ?? '-' }}</div>
+                                                    <span class="badge text-bg-info text-white fw-normal ms-1" style="font-size:.65rem" title="Jumlah antrean terdaftar hari ini">
+                                                        <i class="bi bi-people-fill me-1"></i>{{ $s->registered_count ?? 0 }} Terdaftar
+                                                    </span>
+                                                </div>
                                                 <div class="text-muted" style="font-size:.72rem">
                                                     {{ $s->POLY_NAME ?? '-' }}
                                                     @if($s->ROOM_NAME) · {{ $s->ROOM_NAME }} @endif

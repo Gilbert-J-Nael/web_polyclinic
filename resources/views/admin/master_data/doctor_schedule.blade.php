@@ -39,7 +39,7 @@
                                     <th>Nama Dokter</th>
                                     <th>Hari</th>
                                     <th>Jam Praktek</th>
-                                    <th>Jumlah Slot</th>
+                                    <!-- <th>Jumlah Slot</th> -->
                                     <th>Status</th>
                                     <th>Aksi</th>
                                 </tr>
@@ -51,7 +51,7 @@
                                     <td>{{ !empty($item->DOCTOR_NAME) ? $item->DOCTOR_NAME : '-' }}</td>
                                     <td>{{ !empty($item->DAY) ? $item->DAY : '-' }}</td>
                                     <td>{{ !empty($item->TIME_START) ? $item->TIME_START : '-' }}</td>
-                                    <td>{{ !empty($item->MAX_SLOT) ? $item->MAX_SLOT : '-' }}</td>
+                                    <!-- <td>{{ !empty($item->MAX_SLOT) ? $item->MAX_SLOT : '-' }}</td> -->
                                     <td>
                                         <?php if ($item->IS_ACTIVE == 1): ?>
                                             <span class="badge bg-success">Aktif</span>
@@ -133,10 +133,10 @@
                                         <label class="form-label fw-semibold">Jam Selesai <span class="text-danger">*</span></label>
                                         <input type="time" class="form-control" name="TIME_END" id="add_time_end" readonly>
                                     </div>
-                                    <div class="col-md-4">
+                                    <!-- <div class="col-md-4">
                                         <label class="form-label fw-semibold">Jumlah Slot <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control" name="MAX_SLOT" required min="1" placeholder="Contoh: 20">
-                                    </div>
+                                        <input type="number" class="form-control" name="MAX_SLOT" min="1" placeholder="Contoh: 20">
+                                    </div> -->
                                 </div>
                             </div>
                             <div class="modal-footer px-4 py-3 border-top">
@@ -201,10 +201,10 @@
                                         <label class="form-label fw-semibold">Jam Selesai <span class="text-danger">*</span></label>
                                         <input type="time" class="form-control" name="TIME_END" id="edit_time_end" readonly>
                                     </div>
-                                    <div class="col-md-4">
+                                    <!-- <div class="col-md-4">
                                         <label class="form-label fw-semibold">Jumlah Slot <span class="text-danger">*</span></label>
-                                        <input type="number" class="form-control" name="MAX_SLOT" id="edit_max_slot" required min="1">
-                                    </div>
+                                        <input type="number" class="form-control" name="MAX_SLOT" id="edit_max_slot" min="1">
+                                    </div> -->
                                 </div>
                             </div>
                             <div class="modal-footer px-4 py-3 border-top">
@@ -269,7 +269,6 @@ function openviewModal(jsonStr) {
     document.getElementById('edit_day').value          = s.DAY         ?? '';
     document.getElementById('edit_time_start').value   = s.TIME_START  ?? '';
     document.getElementById('edit_time_end').value     = s.TIME_END    ?? '';
-    document.getElementById('edit_max_slot').value     = s.MAX_SLOT    ?? '';
     new bootstrap.Modal(document.getElementById('modalEditJadwal')).show();
 }
 

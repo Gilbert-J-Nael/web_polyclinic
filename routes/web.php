@@ -18,7 +18,7 @@ use App\Http\Controllers\HistoryController;
 |
 */
 
-Route::get('/', [AuthenticationController::class, 'index_login']);
+Route::get('/login', [AuthenticationController::class, 'index_login']);
 Route::post('/login/authentication', [AuthenticationController::class, 'login_function']);
 
 Route::get('/register', [AuthenticationController::class, 'index_register']);
@@ -55,5 +55,7 @@ Route::get('/riwayat-kunjungan/print',  [HistoryController::class, 'print_riwaya
 });
 
 Route::middleware(['usersession:PATIENT'])->group(function() {
-    Route::get('/dashboard-pasien', [DashboardController::class, 'index_dashboard_pasien']);
+    
 });
+
+Route::get('/', [DashboardController::class, 'index_dashboard_pasien']);

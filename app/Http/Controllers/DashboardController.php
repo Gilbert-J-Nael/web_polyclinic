@@ -16,212 +16,243 @@ class DashboardController extends Controller
         return [150, 150, 90, 90];
     }
 
+    private function calculateTensiFraction(object $q): float
+{
+    $age = \Carbon\Carbon::parse($q->BIRTHDATE)->age;
+    [$sysMin, $sysMax, $diasMin, $diasMax] = $this->getBloodPressureReference($age);
+ 
+    $sysRef  = ($sysMin + $sysMax) / 2;
+    $diasRef = ($diasMin + $diasMax) / 2;
+ 
+    $devSys  = $sysRef  > 0 ? abs(($q->SYSTOLIC  - $sysRef)  / $sysRef  * 100) : 0;
+    $devDias = $diasRef > 0 ? abs(($q->DIASTOLIC - $diasRef) / $diasRef * 100) : 0;
+ 
+    // Rata-rata deviasi %, dibatasi maksimal 1.0 (=100% deviasi dari titik tengah normal)
+    return min((($devSys + $devDias) / 2) / 100, 1.0);
+}
+
     // ── Dynamic Score Calculator ──────────────────────────────────────
     private function calculateDynamicScore(object $q): float
-    {
-        $age = \Carbon\Carbon::parse($q->BIRTHDATE)->age;
-        [$sysMin, $sysMax, $diasMin, $diasMax] = $this->getBloodPressureReference($age);
-
-        $sysRef  = ($sysMin + $sysMax) / 2;
-        $diasRef = ($diasMin + $diasMax) / 2;
-
-        $devSys  = $sysRef  > 0 ? abs(($q->SYSTOLIC  - $sysRef)  / $sysRef  * 100) : 0;
-        $devDias = $diasRef > 0 ? abs(($q->DIASTOLIC - $diasRef) / $diasRef * 100) : 0;
-
-        $tensiAdjusted = min((($devSys + $devDias) / 2) / 100 * 5, 5);
-        $keluhanScore  = ($q->COMPLAINT_SCORE / 10) * 5;
-
-        $registeredAt  = \Carbon\Carbon::parse($q->REGISTRATION_DATE . ' ' . $q->REGISTRATION_TIME);
-        $minutesWaited = max(0, now()->diffInMinutes($registeredAt));
-        $waitingScore  = min(($minutesWaited / 30) * 5, 5);
-
-        $kondisi = $q->SPECIAL_CONDITION_SCORE ? 1 : 0;
-
-        return round(
-    ($tensiAdjusted * 0.40) +
-    ($keluhanScore  * 0.35) +
-    ($waitingScore  * 0.15) +
-    ($kondisi       * 0.10),
-    4
-);
-    }
+{
+    // 1. Tensi — fraksi 0-1, bobot 40%
+    $tensiFraction = $this->calculateTensiFraction($q);
+ 
+    // 2. Keluhan — slider 0-10, fraksi 0-1, bobot 35%
+    $keluhanFraction = min(max($q->COMPLAINT_SCORE / 10, 0), 1);
+ 
+    // 3. Waktu tunggu — 0 menit = 0, 30 menit = full (1.0), bobot 15%
+    $registeredAt    = \Carbon\Carbon::parse($q->REGISTRATION_DATE . ' ' . $q->REGISTRATION_TIME);
+    $minutesWaited   = max(0, now()->diffInMinutes($registeredAt));
+    $waitingFraction = min($minutesWaited / 30, 1.0);
+ 
+    // 4. Kondisi khusus — biner 0/1, langsung jadi fraksi, bobot 10%
+    $kondisiFraction = $q->SPECIAL_CONDITION_SCORE ? 1.0 : 0.0;
+ 
+    $finalFraction = ($tensiFraction    * 0.20)
+                    + ($keluhanFraction * 0.40)
+                    + ($waitingFraction * 0.15)
+                    + ($kondisiFraction * 0.25);
+ 
+    return round($finalFraction * 100, 4);
+}
 
     // ── Tensi Score only (for display) ───────────────────────────────
     private function calculateTensiScore(object $q): float
-    {
-        $age = \Carbon\Carbon::parse($q->BIRTHDATE)->age;
-        [$sysMin, $sysMax, $diasMin, $diasMax] = $this->getBloodPressureReference($age);
-        $sysRef  = ($sysMin + $sysMax) / 2;
-        $diasRef = ($diasMin + $diasMax) / 2;
-        $devSys  = $sysRef  > 0 ? abs(($q->SYSTOLIC  - $sysRef)  / $sysRef  * 100) : 0;
-        $devDias = $diasRef > 0 ? abs(($q->DIASTOLIC - $diasRef) / $diasRef * 100) : 0;
-        return round(min((($devSys + $devDias) / 2) / 100 * 5, 5), 4);
-    }
+{
+    return round($this->calculateTensiFraction($q) * 100, 4);
+}
 
     // ── Waiting Time in minutes (for display) ─────────────────────────
     private function getWaitingMinutes(object $q): int
-    {
-        $registeredAt = \Carbon\Carbon::parse($q->REGISTRATION_DATE . ' ' . $q->REGISTRATION_TIME);
-        return max(0, now()->diffInMinutes($registeredAt));
-    }
+{
+    $registeredAt = \Carbon\Carbon::parse($q->REGISTRATION_DATE . ' ' . $q->REGISTRATION_TIME);
+    return max(0, now()->diffInMinutes($registeredAt));
+}
 
     // ── Dashboard ─────────────────────────────────────────────────────
     public function index_dashboard_frontdesk()
-    {
-        $data['title'] = 'Dashboard Admin';
-
-        $days = [
-            0 => 'Minggu', 1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu',
-            4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu'
-        ];
-        $today  = $days[now()->dayOfWeek];
-        $now    = now()->format('H:i:s');
-        $cutoff = now()->addMinutes(30)->format('H:i:s');
-
-        // ── Fetch all active queues ───────────────────────────────────
-        $queues = DB::table('tr_queue_polyclinic as tq')
-            ->leftJoin('md_patient as mp',          'tq.PATIENT_ID',  '=', 'mp.PATIENT_ID')
-            ->leftJoin('md_doctor_schedule as mds', 'tq.SCHEDULE_ID', '=', 'mds.SCHEDULE_ID')
-            ->leftJoin('md_doctor as md',           'mds.DOCTOR_ID',  '=', 'md.DOCTOR_ID')
-            ->leftJoin('md_poly as mpoly',          'mds.POLY_ID',    '=', 'mpoly.POLY_ID')
-            ->leftJoin('md_poly_room as mpr',       'mpoly.ROOM_ID',  '=', 'mpr.ROOM_ID')
-            ->whereIn('tq.QUEUE_STATUS', ['Menunggu', 'Dilayani', 'Missed'])
-            ->where('tq.IS_ACTIVE', 1)
-            ->when($today, fn($q) => $q->where('mds.DAY', $today))
-            ->select(
-                'tq.QUEUE_ID', 'tq.QUEUE_NUMBER', 'tq.QUEUE_STATUS',
-                'tq.COMPLAINTS', 'tq.SYSTOLIC', 'tq.DIASTOLIC',
-                'tq.COMPLAINT_SCORE', 'tq.SPECIAL_CONDITION_SCORE',
-                'tq.ADJUSTED_STATUS', 'tq.FIXED_QUEUE_STATUS',
-                'tq.REGISTRATION_DATE', 'tq.REGISTRATION_TIME',
-                'tq.CREATED_AT', 'tq.SHADOW_POSITION',
-                'mp.PATIENT_NAME', 'mp.BIRTHDATE',
-                'md.DOCTOR_NAME', 'mpoly.POLY_NAME', 'mpr.ROOM_NAME'
-            )
-            ->get();
-
-        $serving = $queues->where('QUEUE_STATUS', 'Dilayani')->values();
-        $waiting = $queues->whereIn('QUEUE_STATUS', ['Menunggu', 'Dibatalkan'])->values();
-
-        // ── Calculate scores ──────────────────────────────────────────
-        $waiting = $waiting->map(function ($q) {
-            $q->dynamic_score   = $this->calculateDynamicScore($q);
-            $q->tensi_score     = $this->calculateTensiScore($q);
-            $q->waiting_minutes = $this->getWaitingMinutes($q);
-            return $q;
-        });
-
-        $serving = $serving->map(function ($q) {
-            $q->dynamic_score   = $this->calculateDynamicScore($q);
-            $q->tensi_score     = $this->calculateTensiScore($q);
-            $q->waiting_minutes = $this->getWaitingMinutes($q);
-            return $q;
-        });
-
-        // ── Shadow: start from last saved SHADOW_POSITION order ──────
-        $shadowOnly = $waiting->where('FIXED_QUEUE_STATUS', 0)
-                               ->sortBy('SHADOW_POSITION')
-                               ->values();
-
-        // ── Re-sort shadow queue dinonaktifkan ────────────────────────
-        // Agar rule maksimal bypass 2 posisi (yang sudah diatur saat pasien baru
-        // masuk di fungsi bubbleUpNewPatient) tidak rusak / berulang kali bypass
-        // setiap kali halaman dashboard di-refresh.
-        $shadowSorted = $shadowOnly->values();
-
-        // ── Detect bypasses dan update ADJUSTED_STATUS ────────────────
-        foreach ($shadowSorted as $newPos => $q) {
-            $oldPos = $q->SHADOW_POSITION;
-
-            if ($oldPos !== null && $newPos > $oldPos && $q->ADJUSTED_STATUS < 2) {
-                $newAdjusted = min($q->ADJUSTED_STATUS + 1, 2);
-                DB::table('tr_queue_polyclinic')
-                    ->where('QUEUE_ID', $q->QUEUE_ID)
-                    ->update([
-                        'ADJUSTED_STATUS' => $newAdjusted,
-                        'SHADOW_POSITION' => $newPos,
-                    ]);
-                $q->ADJUSTED_STATUS = $newAdjusted;
-                $q->SHADOW_POSITION = $newPos;
-            } elseif ($oldPos !== $newPos) {
-                DB::table('tr_queue_polyclinic')
-                    ->where('QUEUE_ID', $q->QUEUE_ID)
-                    ->update(['SHADOW_POSITION' => $newPos]);
-                $q->SHADOW_POSITION = $newPos;
-            }
+{
+    $data['title'] = 'Dashboard Admin';
+ 
+    $days = [
+        0 => 'Minggu', 1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu',
+        4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu'
+    ];
+    $today  = $days[now()->dayOfWeek];
+    $now    = now()->format('H:i:s');
+    $cutoff = now()->addMinutes(30)->format('H:i:s');
+ 
+    // ── Fetch all active queues ───────────────────────────────────
+    $queues = DB::table('tr_queue_polyclinic as tq')
+        ->leftJoin('md_patient as mp',          'tq.PATIENT_ID',  '=', 'mp.PATIENT_ID')
+        ->leftJoin('md_doctor_schedule as mds', 'tq.SCHEDULE_ID', '=', 'mds.SCHEDULE_ID')
+        ->leftJoin('md_doctor as md',           'mds.DOCTOR_ID',  '=', 'md.DOCTOR_ID')
+        ->leftJoin('md_poly as mpoly',          'mds.POLY_ID',    '=', 'mpoly.POLY_ID')
+        ->leftJoin('md_poly_room as mpr',       'mpoly.ROOM_ID',  '=', 'mpr.ROOM_ID')
+        ->whereIn('tq.QUEUE_STATUS', ['Menunggu', 'Dilayani', 'Missed'])
+        ->where('tq.IS_ACTIVE', 1)
+        ->when($today, fn($q) => $q->where('mds.DAY', $today))
+        ->select(
+            'tq.QUEUE_ID', 'tq.QUEUE_NUMBER', 'tq.QUEUE_STATUS',
+            'tq.COMPLAINTS', 'tq.SYSTOLIC', 'tq.DIASTOLIC',
+            'tq.COMPLAINT_SCORE', 'tq.SPECIAL_CONDITION_SCORE',
+            'tq.ADJUSTED_STATUS', 'tq.FIXED_QUEUE_STATUS',
+            'tq.REGISTRATION_DATE', 'tq.REGISTRATION_TIME',
+            'tq.CREATED_AT', 'tq.SHADOW_POSITION',
+            'mp.PATIENT_NAME', 'mp.BIRTHDATE',
+            'md.DOCTOR_NAME', 'mpoly.POLY_NAME', 'mpr.ROOM_NAME'
+        )
+        ->get();
+ 
+    $serving = $queues->where('QUEUE_STATUS', 'Dilayani')->values();
+    $waiting = $queues->whereIn('QUEUE_STATUS', ['Menunggu', 'Dibatalkan'])->values();
+ 
+    // ── Calculate scores ──────────────────────────────────────────
+    $waiting = $waiting->map(function ($q) {
+        $q->dynamic_score   = $this->calculateDynamicScore($q);
+        $q->tensi_score     = $this->calculateTensiScore($q);
+        $q->waiting_minutes = $this->getWaitingMinutes($q);
+        return $q;
+    });
+ 
+    $serving = $serving->map(function ($q) {
+        $q->dynamic_score   = $this->calculateDynamicScore($q);
+        $q->tensi_score     = $this->calculateTensiScore($q);
+        $q->waiting_minutes = $this->getWaitingMinutes($q);
+        return $q;
+    });
+ 
+    // ── Shadow: start from last saved SHADOW_POSITION order ──────
+    $shadowOnly = $waiting->where('FIXED_QUEUE_STATUS', 0)
+                           ->sortBy('SHADOW_POSITION')
+                           ->values();
+ 
+    // ── Re-sort shadow queue dinonaktifkan ────────────────────────
+    // Agar rule maksimal bypass 2 posisi (yang sudah diatur saat pasien baru
+    // masuk di fungsi bubbleUpNewPatient) tidak rusak / berulang kali bypass
+    // setiap kali halaman dashboard di-refresh.
+    $shadowSorted = $shadowOnly->values();
+ 
+    // ── Detect bypasses dan update ADJUSTED_STATUS ────────────────
+    foreach ($shadowSorted as $newPos => $q) {
+        $oldPos = $q->SHADOW_POSITION;
+ 
+        if ($oldPos !== null && $newPos > $oldPos && $q->ADJUSTED_STATUS < 2) {
+            $newAdjusted = min($q->ADJUSTED_STATUS + 1, 2);
+            DB::table('tr_queue_polyclinic')
+                ->where('QUEUE_ID', $q->QUEUE_ID)
+                ->update([
+                    'ADJUSTED_STATUS' => $newAdjusted,
+                    'SHADOW_POSITION' => $newPos,
+                ]);
+            $q->ADJUSTED_STATUS = $newAdjusted;
+            $q->SHADOW_POSITION = $newPos;
+        } elseif ($oldPos !== $newPos) {
+            DB::table('tr_queue_polyclinic')
+                ->where('QUEUE_ID', $q->QUEUE_ID)
+                ->update(['SHADOW_POSITION' => $newPos]);
+            $q->SHADOW_POSITION = $newPos;
         }
-
-        // ── Fixed queue ───────────────────────────────────────────────
-        $alreadyFixed = $waiting->where('FIXED_QUEUE_STATUS', 1)
-                                 ->sortBy('CREATED_AT')
-                                 ->values();
-
-        // ── Fill empty Fixed slots from shadow ────────────────────────
-        $emptySlots = max(0, 3 - $serving->count() - $alreadyFixed->count());
-
-        if ($emptySlots > 0) {
-            $toPromote = $shadowSorted->sortByDesc(function ($q) {
-                $waitBonus     = min($q->waiting_minutes / 30, 1) * 2.0;
-                $adjustedBonus = ($q->ADJUSTED_STATUS / 2) * 1.5;
-                return $q->dynamic_score + $waitBonus + $adjustedBonus;
-            })->take($emptySlots);
-
-            if ($toPromote->count() > 0) {
-                DB::table('tr_queue_polyclinic')
-                    ->whereIn('QUEUE_ID', $toPromote->pluck('QUEUE_ID'))
-                    ->update(['FIXED_QUEUE_STATUS' => 1]);
-
-                $toPromote = $toPromote->map(function ($q) {
-                    $q->FIXED_QUEUE_STATUS = 1;
-                    return $q;
-                });
-
-                $promotedIds  = $toPromote->pluck('QUEUE_ID')->all();
-                $alreadyFixed = $alreadyFixed->merge($toPromote)
-                                             ->sortBy('CREATED_AT')->values();
-                $shadowSorted = $shadowSorted->filter(
-                    fn($q) => !in_array($q->QUEUE_ID, $promotedIds)
-                )->values();
+    }
+ 
+    // ── Fixed queue ───────────────────────────────────────────────
+    $alreadyFixed = $waiting->where('FIXED_QUEUE_STATUS', 1)
+                             ->sortBy('CREATED_AT')
+                             ->values();
+ 
+    // ── Fill empty Fixed slots from shadow ────────────────────────
+    $emptySlots = max(0, 3 - $serving->count() - $alreadyFixed->count());
+ 
+    if ($emptySlots > 0) {
+        $toPromote = $shadowSorted->sortByDesc(function ($q) {
+            $waitBonus = min($q->waiting_minutes / 30, 1) * 40.0;
+            if ($q->waiting_minutes > 30) {
+                $waitBonus += ($q->waiting_minutes - 30) * 2.0;
             }
+            $adjustedBonus = ($q->ADJUSTED_STATUS / 2) * 30.0;
+            return $q->dynamic_score + $waitBonus + $adjustedBonus;
+        })->take($emptySlots);
+ 
+        if ($toPromote->count() > 0) {
+            DB::table('tr_queue_polyclinic')
+                ->whereIn('QUEUE_ID', $toPromote->pluck('QUEUE_ID'))
+                ->update(['FIXED_QUEUE_STATUS' => 1]);
+
+            $toPromote = $toPromote->map(function ($q) {
+                $q->FIXED_QUEUE_STATUS = 1;
+                return $q;
+            });
+
+            $promotedIds  = $toPromote->pluck('QUEUE_ID')->all();
+            $alreadyFixed = $alreadyFixed->merge($toPromote)
+                                         ->sortBy('CREATED_AT')->values();
+            $shadowSorted = $shadowSorted->filter(
+                fn($q) => !in_array($q->QUEUE_ID, $promotedIds)
+            )->values();
         }
+    }
 
-        $data['fixed_queue']           = $serving->merge($alreadyFixed)->values();
-        $data['shadow_queue']          = $shadowSorted->take(7)->values();
-        $data['remaining_queue_count'] = $waiting->count();
+    $data['fixed_queue']           = $serving->merge($alreadyFixed)->values();
+    $data['shadow_queue']          = $shadowSorted->take(7)->values();
+    $data['remaining_queue_count'] = $waiting->count();
 
-        // ── Schedules ─────────────────────────────────────────────────
-        $currentSchedules = DB::table('md_doctor_schedule as mds')
+    // ── Schedules ─────────────────────────────────────────────────
+    $todayDate = now()->toDateString();
+
+    $currentSchedules = DB::table('md_doctor_schedule as mds')
+        ->leftJoin('md_doctor as md',     'mds.DOCTOR_ID', '=', 'md.DOCTOR_ID')
+        ->leftJoin('md_poly as mpoly',    'mds.POLY_ID',   '=', 'mpoly.POLY_ID')
+        ->leftJoin('md_poly_room as mpr', 'mpoly.ROOM_ID', '=', 'mpr.ROOM_ID')
+        ->select(
+            'mds.SCHEDULE_ID', 'mds.DOCTOR_ID', 'mds.POLY_ID', 'mds.DAY', 'mds.TIME_START', 'mds.TIME_END',
+            'md.DOCTOR_NAME', 'mpoly.POLY_NAME', 'mpr.ROOM_NAME'
+        )
+        ->selectSub(function ($q) use ($todayDate) {
+            $q->from('tr_queue_polyclinic as tq')
+                ->selectRaw('count(*)')
+                ->whereColumn('tq.SCHEDULE_ID', 'mds.SCHEDULE_ID')
+                ->where('tq.REGISTRATION_DATE', $todayDate)
+                ->where('tq.IS_ACTIVE', 1);
+        }, 'registered_count')
+        ->where('mds.DAY', $today)
+        ->whereRaw("TIME_TO_SEC(mds.TIME_START) <= TIME_TO_SEC(?)", [$now])
+        ->whereRaw("TIME_TO_SEC(mds.TIME_END) >= TIME_TO_SEC(?)", [$cutoff])
+        ->where('mds.IS_ACTIVE', 1)
+        ->where('mpoly.IS_ACTIVE', 1)
+        ->orderBy('mds.TIME_START')
+        ->get();
+
+    $data['available_schedules'] = $currentSchedules->isNotEmpty()
+        ? $currentSchedules
+        : DB::table('md_doctor_schedule as mds')
             ->leftJoin('md_doctor as md',     'mds.DOCTOR_ID', '=', 'md.DOCTOR_ID')
             ->leftJoin('md_poly as mpoly',    'mds.POLY_ID',   '=', 'mpoly.POLY_ID')
             ->leftJoin('md_poly_room as mpr', 'mpoly.ROOM_ID', '=', 'mpr.ROOM_ID')
+            ->select(
+                'mds.SCHEDULE_ID', 'mds.DOCTOR_ID', 'mds.POLY_ID', 'mds.DAY', 'mds.TIME_START', 'mds.TIME_END',
+                'md.DOCTOR_NAME', 'mpoly.POLY_NAME', 'mpr.ROOM_NAME'
+            )
+            ->selectSub(function ($q) use ($todayDate) {
+                $q->from('tr_queue_polyclinic as tq')
+                    ->selectRaw('count(*)')
+                    ->whereColumn('tq.SCHEDULE_ID', 'mds.SCHEDULE_ID')
+                    ->where('tq.REGISTRATION_DATE', $todayDate)
+                    ->where('tq.IS_ACTIVE', 1);
+            }, 'registered_count')
             ->where('mds.DAY', $today)
-            ->whereRaw("TIME_TO_SEC(mds.TIME_START) <= TIME_TO_SEC(?)", [$now])
-            ->whereRaw("TIME_TO_SEC(mds.TIME_END) >= TIME_TO_SEC(?)", [$cutoff])
+            ->whereRaw("TIME_TO_SEC(mds.TIME_START) > TIME_TO_SEC(?)", [$now])
             ->where('mds.IS_ACTIVE', 1)
             ->where('mpoly.IS_ACTIVE', 1)
             ->orderBy('mds.TIME_START')
+            ->limit(1)
             ->get();
-
-        $data['available_schedules'] = $currentSchedules->isNotEmpty()
-            ? $currentSchedules
-            : DB::table('md_doctor_schedule as mds')
-                ->leftJoin('md_doctor as md',     'mds.DOCTOR_ID', '=', 'md.DOCTOR_ID')
-                ->leftJoin('md_poly as mpoly',    'mds.POLY_ID',   '=', 'mpoly.POLY_ID')
-                ->leftJoin('md_poly_room as mpr', 'mpoly.ROOM_ID', '=', 'mpr.ROOM_ID')
-                ->where('mds.DAY', $today)
-                ->whereRaw("TIME_TO_SEC(mds.TIME_START) > TIME_TO_SEC(?)", [$now])
-                ->where('mds.IS_ACTIVE', 1)
-                ->where('mpoly.IS_ACTIVE', 1)
-                ->orderBy('mds.TIME_START')
-                ->limit(1)
-                ->get();
-
-        return
-            view('admin.templates.header',  $data) .
-            view('admin.templates.sidebar') .
-            view('admin.dashboard',         $data) .
-            view('admin.templates.footer');
-    }
+ 
+    return
+        view('admin.templates.header',  $data) .
+        view('admin.templates.sidebar') .
+        view('admin.dashboard',         $data) .
+        view('admin.templates.footer');
+}
 
     // ── Search Patients ───────────────────────────────────────────────
     public function searchPatients(Request $request)
@@ -325,126 +356,117 @@ class DashboardController extends Controller
     //   Hasil: [Sudimoro, Ahmad, Hondo, Rinda, Dewi, Mina, Luna] ✓
     //
     private function bubbleUpNewPatient(int $newQueueId): void
-    {
-        // ── STEP 1: Fetch shadow queue ────────────────────────────────
-        // Pasien existing → urut ASC by SHADOW_POSITION.
-        // Pasien baru (SHADOW_POSITION IS NULL) → paling akhir.
-        $shadow = DB::table('tr_queue_polyclinic as tq')
-            ->leftJoin('md_patient as mp', 'tq.PATIENT_ID', '=', 'mp.PATIENT_ID')
-            ->where('tq.IS_ACTIVE', 1)
-            ->where('tq.FIXED_QUEUE_STATUS', 0)
-            ->where('tq.QUEUE_STATUS', 'Menunggu')
-            ->select(
-                'tq.QUEUE_ID', 'tq.ADJUSTED_STATUS',
-                'tq.SHADOW_POSITION', 'tq.SYSTOLIC', 'tq.DIASTOLIC',
-                'tq.COMPLAINT_SCORE', 'tq.SPECIAL_CONDITION_SCORE',
-                'tq.REGISTRATION_DATE', 'tq.REGISTRATION_TIME',
-                'mp.BIRTHDATE'
-            )
-            ->orderByRaw('tq.SHADOW_POSITION IS NULL ASC')
-            ->orderBy('tq.SHADOW_POSITION', 'ASC')
-            ->get();
-
-        if ($shadow->isEmpty()) return;
-
-        // ── STEP 2: Assign posisi 0,1,2,…N-1 ─────────────────────────
-        $shadowArr = [];
-        foreach ($shadow as $idx => $q) {
-            $q->SHADOW_POSITION = $idx;
-            $shadowArr[$idx]    = $q;
-        }
-
-        foreach ($shadowArr as $idx => $q) {
-            DB::table('tr_queue_polyclinic')
-                ->where('QUEUE_ID', $q->QUEUE_ID)
-                ->update(['SHADOW_POSITION' => $idx]);
-        }
-
-        // Temukan index pasien baru
-        $newIndex = null;
-        foreach ($shadowArr as $i => $q) {
-            if ($q->QUEUE_ID === $newQueueId) {
-                $newIndex = $i;
-                break;
-            }
-        }
-
-        // Tidak ditemukan atau pasien pertama → tidak ada yang di-bubble
-        if ($newIndex === null || $newIndex === 0) return;
-
-        $newPatient      = $shadowArr[$newIndex];
-        $newScore        = $this->calculateDynamicScore($newPatient);
-        $currentPosition = $newIndex;
-
-        // ── STEP 3: PRE-SCAN — cari hardFloor ────────────────────────
-        // Scan index 0 s/d newIndex-1.
-        // Cari index TERBESAR dari semua pasien protected.
-        $hardFloor = -1;
-
-        for ($i = 0; $i < $newIndex; $i++) {
-            $q         = $shadowArr[$i];
-            $isFrozen  = ($q->ADJUSTED_STATUS == 2);
-            $isVeteran = ($this->getWaitingMinutes($q) >= 30);
-
-            if (($isFrozen || $isVeteran) && $i > $hardFloor) {
-                $hardFloor = $i;
-            }
-        }
-
-        // Hitung finalCeiling: batas currentPosition agar loop berhenti
-        $minimumPosition  = $hardFloor + 1;       // tidak boleh naik melewati protected
-        $maxBubbleCeiling = $newIndex - 2;  // maks naik 2 posisi
-        $finalCeiling     = max($minimumPosition, $maxBubbleCeiling);
-
-        // Tidak ada ruang untuk naik
-        if ($currentPosition <= $finalCeiling) {
-            return;
-        }
-
-        // ── STEP 4: Loop bubble-up ────────────────────────────────────
-        $swapCount = 0;
-        while ($currentPosition > $finalCeiling && $swapCount < 2) {
-
-            $targetIndex   = $currentPosition - 1;
-            $targetPatient = $shadowArr[$targetIndex];
-
-            // Guard ganda: pastikan target bukan protected
-            if ($targetPatient->ADJUSTED_STATUS == 2 ||
-                $this->getWaitingMinutes($targetPatient) >= 30) {
-                break;
-            }
-
-            // Hanya naik jika score pasien baru lebih tinggi
-            $targetScore = $this->calculateDynamicScore($targetPatient);
-            if ($newScore <= $targetScore) {
-                break;
-            }
-
-            // SWAP — hanya TARGET yang ADJUSTED_STATUS +1, pasien baru tidak berubah
-            $newAdjusted = min($targetPatient->ADJUSTED_STATUS + 1, 2);
-
-            DB::table('tr_queue_polyclinic')
-                ->where('QUEUE_ID', $targetPatient->QUEUE_ID)
-                ->update([
-                    'ADJUSTED_STATUS' => $newAdjusted,
-                    'SHADOW_POSITION' => $currentPosition,
-                ]);
-
-            $targetPatient->ADJUSTED_STATUS = $newAdjusted;
-            $targetPatient->SHADOW_POSITION = $currentPosition;
-            $shadowArr[$currentPosition]    = $targetPatient;
-
-            $newPatient->SHADOW_POSITION = $targetIndex;
-            $shadowArr[$targetIndex]     = $newPatient;
-            $currentPosition             = $targetIndex;
-            $swapCount++;
-        }
-
-        // ── STEP 5: Simpan posisi akhir pasien baru ───────────────────
-        DB::table('tr_queue_polyclinic')
-            ->where('QUEUE_ID', $newQueueId)
-            ->update(['SHADOW_POSITION' => $currentPosition]);
+{
+    // ── STEP 1: Fetch shadow queue ────────────────────────────────
+    $shadow = DB::table('tr_queue_polyclinic as tq')
+        ->leftJoin('md_patient as mp', 'tq.PATIENT_ID', '=', 'mp.PATIENT_ID')
+        ->where('tq.IS_ACTIVE', 1)
+        ->where('tq.FIXED_QUEUE_STATUS', 0)
+        ->where('tq.QUEUE_STATUS', 'Menunggu')
+        ->select(
+            'tq.QUEUE_ID', 'tq.ADJUSTED_STATUS',
+            'tq.SHADOW_POSITION', 'tq.SYSTOLIC', 'tq.DIASTOLIC',
+            'tq.COMPLAINT_SCORE', 'tq.SPECIAL_CONDITION_SCORE',
+            'tq.REGISTRATION_DATE', 'tq.REGISTRATION_TIME',
+            'mp.BIRTHDATE'
+        )
+        ->orderByRaw('tq.SHADOW_POSITION IS NULL ASC')
+        ->orderBy('tq.SHADOW_POSITION', 'ASC')
+        ->get();
+ 
+    if ($shadow->isEmpty()) return;
+ 
+    // ── STEP 2: Assign posisi 0,1,2,…N-1 ─────────────────────────
+    $shadowArr = [];
+    foreach ($shadow as $idx => $q) {
+        $q->SHADOW_POSITION = $idx;
+        $shadowArr[$idx]    = $q;
     }
+ 
+    foreach ($shadowArr as $idx => $q) {
+        DB::table('tr_queue_polyclinic')
+            ->where('QUEUE_ID', $q->QUEUE_ID)
+            ->update(['SHADOW_POSITION' => $idx]);
+    }
+ 
+    // Temukan index pasien baru
+    $newIndex = null;
+    foreach ($shadowArr as $i => $q) {
+        if ($q->QUEUE_ID === $newQueueId) {
+            $newIndex = $i;
+            break;
+        }
+    }
+ 
+    // Tidak ditemukan atau pasien pertama → tidak ada yang di-bubble
+    if ($newIndex === null || $newIndex === 0) return;
+ 
+    $newPatient      = $shadowArr[$newIndex];
+    $newScore        = $this->calculateDynamicScore($newPatient);
+    $currentPosition = $newIndex;
+ 
+    // ── STEP 3: PRE-SCAN — cari hardFloor ────────────────────────
+    $hardFloor = -1;
+ 
+    for ($i = 0; $i < $newIndex; $i++) {
+        $q         = $shadowArr[$i];
+        $isFrozen  = ($q->ADJUSTED_STATUS == 2);
+        $isVeteran = ($this->getWaitingMinutes($q) >= 30);
+ 
+        if (($isFrozen || $isVeteran) && $i > $hardFloor) {
+            $hardFloor = $i;
+        }
+    }
+ 
+    $minimumPosition  = $hardFloor + 1;
+    $maxBubbleCeiling = $newIndex - 2;
+    $finalCeiling     = max($minimumPosition, $maxBubbleCeiling);
+ 
+    if ($currentPosition <= $finalCeiling) {
+        return;
+    }
+ 
+    // ── STEP 4: Loop bubble-up ────────────────────────────────────
+    $swapCount = 0;
+    while ($currentPosition > $finalCeiling && $swapCount < 2) {
+ 
+        $targetIndex   = $currentPosition - 1;
+        $targetPatient = $shadowArr[$targetIndex];
+ 
+        if ($targetPatient->ADJUSTED_STATUS == 2 ||
+            $this->getWaitingMinutes($targetPatient) >= 30) {
+            break;
+        }
+ 
+        $targetScore = $this->calculateDynamicScore($targetPatient);
+        if ($newScore <= $targetScore) {
+            break;
+        }
+ 
+        $newAdjusted = min($targetPatient->ADJUSTED_STATUS + 1, 2);
+ 
+        DB::table('tr_queue_polyclinic')
+            ->where('QUEUE_ID', $targetPatient->QUEUE_ID)
+            ->update([
+                'ADJUSTED_STATUS' => $newAdjusted,
+                'SHADOW_POSITION' => $currentPosition,
+            ]);
+ 
+        $targetPatient->ADJUSTED_STATUS = $newAdjusted;
+        $targetPatient->SHADOW_POSITION = $currentPosition;
+        $shadowArr[$currentPosition]    = $targetPatient;
+ 
+        $newPatient->SHADOW_POSITION = $targetIndex;
+        $shadowArr[$targetIndex]     = $newPatient;
+        $currentPosition             = $targetIndex;
+        $swapCount++;
+    }
+ 
+    // ── STEP 5: Simpan posisi akhir pasien baru ───────────────────
+    DB::table('tr_queue_polyclinic')
+        ->where('QUEUE_ID', $newQueueId)
+        ->update(['SHADOW_POSITION' => $currentPosition]);
+}
 
     public function queuePanggil(Request $request)
     {

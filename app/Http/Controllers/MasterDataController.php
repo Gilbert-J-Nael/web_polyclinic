@@ -234,7 +234,7 @@ public function delete_dokter(Request $req)
             ->leftJoin('md_poly as mp', 'mds.POLY_ID', '=', 'mp.POLY_ID')
             ->select('mds.*', 'md.DOCTOR_NAME')
             ->where('mds.IS_ACTIVE', 1)
-            ->paginate(10);
+            ->get();
         
         $days = DB::select("SHOW COLUMNS FROM md_doctor_schedule WHERE Field = 'DAY'");
         preg_match("/^enum\((.*)\)$/", $days[0]->Type, $matches);
@@ -259,7 +259,7 @@ public function delete_dokter(Request $req)
         'DAY'        => 'required|string',
         'TIME_START' => 'required',
         'TIME_END'   => 'required',
-        'MAX_SLOT'   => 'required|integer|min:1',
+        // 'MAX_SLOT'   => 'required|integer|min:1',
     ]);
 
     DB::table('md_doctor_schedule')->insert([
@@ -268,7 +268,7 @@ public function delete_dokter(Request $req)
         'DAY'        => $req->DAY,
         'TIME_START' => $req->TIME_START,
         'TIME_END'   => $req->TIME_END,
-        'MAX_SLOT'   => $req->MAX_SLOT,
+        // 'MAX_SLOT'   => $req->MAX_SLOT,
         'IS_ACTIVE'  => 1,
         'CREATED_AT' => now(),
         'UPDATED_AT' => now(),
@@ -287,7 +287,7 @@ public function update_jadwal_dokter(Request $req)
         'DAY'         => 'required|string',
         'TIME_START'  => 'required',
         'TIME_END'    => 'required',
-        'MAX_SLOT'    => 'required|integer|min:1',
+        // 'MAX_SLOT'    => 'required|integer|min:1',
     ]);
 
     DB::table('md_doctor_schedule')
@@ -298,7 +298,7 @@ public function update_jadwal_dokter(Request $req)
             'DAY'        => $req->DAY,
             'TIME_START' => $req->TIME_START,
             'TIME_END'   => $req->TIME_END,
-            'MAX_SLOT'   => $req->MAX_SLOT,
+            // 'MAX_SLOT'   => $req->MAX_SLOT,
             'UPDATED_AT' => now(),
         ]);
 

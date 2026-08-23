@@ -80,38 +80,45 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function calculateScore() {
-            const sys     = parseFloat(sysInput.value);
-            const dias    = parseFloat(diasInput.value);
-            const age     = parseFloat(ageDisplay.textContent);
-            const keluhan = parseFloat(slider.value);
+    const sys     = parseFloat(sysInput.value);
+    const dias    = parseFloat(diasInput.value);
+    const age     = parseFloat(ageDisplay.textContent);
+    const keluhan = parseFloat(slider.value);
 
-            if (!sys || !dias || !age) {
-                scoreEl.textContent = '0.00';
-                if (tensiEl) tensiEl.textContent = '0.00';
-                return;
-            }
+    if (!sys || !dias || !age) {
+        scoreEl.textContent = '0.00';
+        if (tensiEl) tensiEl.textContent = '0.00';
+        return;
+    }
 
-            const [sysMin, sysMax, diasMin, diasMax] = getReference(age);
-            const sysRef  = (sysMin + sysMax) / 2;
-            const diasRef = (diasMin + diasMax) / 2;
+    const [sysMin, sysMax, diasMin, diasMax] = getReference(age);
+    const sysRef  = (sysMin + sysMax) / 2;
+    const diasRef = (diasMin + diasMax) / 2;
 
-            const devSys  = Math.abs((sys  - sysRef)  / sysRef  * 100);
-            const devDias = Math.abs((dias - diasRef) / diasRef * 100);
-            const tensiAdjusted = Math.min((devSys + devDias) / 2 / 100 * 5, 5);
+    const devSys  = Math.abs((sys  - sysRef)  / sysRef  * 100);
+    const devDias = Math.abs((dias - diasRef) / diasRef * 100);
 
-            const keluhanScore = (keluhan / 10) * 5;
-            const waitingScore = 0;
-            const kondisi      = checkbox.checked ? 1 : 0;
+    // ✅ fraksi 0–1, sama seperti calculateTensiFraction() di PHP
+    const tensiFraction = Math.min(((devSys + devDias) / 2) / 100, 1.0);
 
-            const finalScore =
-                (tensiAdjusted * 0.40) +
-                (keluhanScore  * 0.35) +
-                (waitingScore  * 0.15) +
-                (kondisi       * 0.10);
+    // ✅ fraksi 0–1, sama seperti calculateDynamicScore() di PHP
+    const keluhanFraction = Math.min(Math.max(keluhan / 10, 0), 1);
+    const waitingFraction = 0; // waktu tunggu baru dihitung setelah antrean tersimpan
+    const kondisi          = checkbox.checked ? 1 : 0;
 
-            scoreEl.textContent = finalScore.toFixed(2);
-            if (tensiEl) tensiEl.textContent = tensiAdjusted.toFixed(2);
-        }
+    const finalFraction =
+        (tensiFraction    * 0.40) +
+        (keluhanFraction  * 0.35) +
+        (waitingFraction  * 0.15) +
+        (kondisi          * 0.10);
+
+    // ✅ dikonversi ke skala 0–100, sama seperti tampilan tensi_score & dynamic_score
+    const tensiScore = tensiFraction * 100;
+    const finalScore = finalFraction * 100;
+
+    scoreEl.textContent = finalScore.toFixed(2);
+    if (tensiEl) tensiEl.textContent = tensiScore.toFixed(2);
+}
 
         [sysInput, diasInput, slider, checkbox].forEach(el => {
             el.addEventListener('input',  calculateScore);

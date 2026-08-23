@@ -293,7 +293,7 @@
                                         <li>
                                             <a href="{{ url('/riwayat-kunjungan') }}" class="tp-link">Riwayat Kunjungan</a>
                                         </li>
-                                        <li>
+                                        <!-- <li>
                                             <a href="ecommerce.html" class="tp-link">eCommerce</a>
                                         </li>
                                         <li>
@@ -304,7 +304,7 @@
                                         </li>
                                         <li>
                                             <a href="jobs.html" class="tp-link">Jobs</a>
-                                        </li>
+                                        </li> -->
                                     </ul>
                                 </div>
                             </li>
